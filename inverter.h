@@ -1,14 +1,14 @@
 #ifndef ___INVERTER_H
 #define ___INVERTER_H
 
-#include <atomic>
 #include <thread>
 #include <mutex>
 
 using namespace std;
 
 class cInverter {
-    unsigned char buf[1024]; //internal work buffer
+    unsigned char buf[1024];	// internal work buffer
+    char escaped_buf[4096];	// screen-printable version of above
 
     char warnings[1024];
     char status1[1024];
@@ -17,23 +17,19 @@ class cInverter {
 
     std::string device;
     std::mutex m;
-    std::thread t1;
-    std::atomic_bool quit_thread{false};
 
     void SetMode(char newmode);
     bool CheckCRC(unsigned char *buff, int len);
-    bool query(const char *cmd, int replysize);
+    bool query(const char *cmd);
     uint16_t cal_crc_half(uint8_t *pin, uint8_t len);
+    char *escape_strn(unsigned char *str, int n);
 
     public:
         cInverter(std::string devicename);
         void poll();
         void runMultiThread() {
-            t1 = std::thread(&cInverter::poll, this);
-        }
-        void terminateThread() {
-            quit_thread = true;
-            t1.join();
+            std::thread t1(&cInverter::poll, this);
+            t1.detach();
         }
 
         string *GetQpiriStatus();
@@ -41,7 +37,7 @@ class cInverter {
         string *GetWarnings();
 
         int GetMode();
-        void ExecuteCmd(const std::string cmd, int);
+        void ExecuteCmd(const std::string cmd);
 };
 
 #endif // ___INVERTER_H

@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <thread>
-#include <sys/file.h>
 
 #include "main.h"
 #include "tools.h"
@@ -16,7 +15,6 @@
 
 #include <pthread.h>
 #include <signal.h>
-#include <string.h>
 
 #include <iostream>
 #include <string>
@@ -90,6 +88,8 @@ void getSettingsFile(string filename) {
                     attemptAddSetting(&ampfactor, linepart2);
                 else if(linepart1 == "watt_factor")
                     attemptAddSetting(&wattfactor, linepart2);
+                else if(linepart1 == "watt_factor")
+                    attemptAddSetting(&wattfactor, linepart2);
                 else
                     continue;
             }
@@ -161,41 +161,21 @@ int main(int argc, char* argv[]) {
     if(cmdArgs.cmdOptionExists("-1") || cmdArgs.cmdOptionExists("--run-once")) {
         runOnce = true;
     }
-    lprintf("INVERTER: Debug set");
-    const char *settings;
+    lprintf("Debug set");
 
     // Get the rest of the settings from the conf file
     if( access( "./inverter.conf", F_OK ) != -1 ) { // file exists
-        settings = "./inverter.conf";
+        getSettingsFile("./inverter.conf");
     } else { // file doesn't exist
-        settings = "/etc/inverter/inverter.conf";
+        getSettingsFile("/etc/inverter/inverter.conf");
     }
-    getSettingsFile(settings);
-    int fd = open(settings, O_RDWR);
-    while (flock(fd, LOCK_EX)) sleep(1);
 
     bool ups_status_changed(false);
     ups = new cInverter(devicename);
 
     // Logic to send 'raw commands' to the inverter..
     if (!rawcmd.empty()) {
-        int replylen;
-        if (!strcmp(rawcmd.c_str(), "QPI"))
-            replylen = 8;
-        else if (!strcmp(rawcmd.c_str(), "QID"))
-            replylen = 18;
-        else if (!strcmp(rawcmd.c_str(), "QVFW"))
-            replylen = 18;
-        else if (!strcmp(rawcmd.c_str(), "QVFW2"))
-            replylen = 19;
-        else if (!strcmp(rawcmd.c_str(), "QFLAG"))
-            replylen = 15;
-        else if (!strcmp(rawcmd.c_str(), "QBOOT"))
-            replylen = 5;
-        else if (!strcmp(rawcmd.c_str(), "QOPM"))
-            replylen = 6;
-        else replylen = 7;
-        ups->ExecuteCmd(rawcmd, replylen);
+        ups->ExecuteCmd(rawcmd);
         // We're piggybacking off the qpri status response...
         printf("Reply:  %s\n", ups->GetQpiriStatus()->c_str());
         exit(0);
@@ -208,7 +188,7 @@ int main(int argc, char* argv[]) {
             int mode = ups->GetMode();
 
             if (mode)
-                lprintf("INVERTER: Mode Currently set to: %d", mode);
+                lprintf("Mode Currently set to: %d", mode);
 
             ups_status_changed = false;
         }
@@ -227,15 +207,15 @@ int main(int argc, char* argv[]) {
             if (reply1 && reply2 && warnings) {
 
                 // Parse and display values
-                sscanf(reply1->c_str(), "%f %f %f %f %d %d %d %d %f %d %d %d %f %f %f %d %s", &voltage_grid, &freq_grid, &voltage_out, &freq_out, &load_va, &load_watt, &load_percent, &voltage_bus, &voltage_batt, &batt_charge_current, &batt_capacity, &temp_heatsink, &pv_input_current, &pv_input_voltage, &scc_voltage, &batt_discharge_current, &device_status);
+                sscanf(reply1->c_str(), "%f %f %f %f %d %d %d %d %f %d %d %d %f %f %f %d %s", &voltage_grid, &freq_grid, &voltage_out, &freq_out, &load_va, &load_watt, &load_percent, &voltage_bus, &voltage_batt, &batt_charge_current, &batt_capacity, &temp_heatsink, &pv_input_current, &pv_input_voltage, &scc_voltage, &batt_discharge_current, (char *)&device_status);
                 sscanf(reply2->c_str(), "%f %f %f %f %f %d %d %f %f %f %f %f %d %d %d %d %d %d - %d %d %d %f", &grid_voltage_rating, &grid_current_rating, &out_voltage_rating, &out_freq_rating, &out_current_rating, &out_va_rating, &out_watt_rating, &batt_rating, &batt_recharge_voltage, &batt_under_voltage, &batt_bulk_voltage, &batt_float_voltage, &batt_type, &max_grid_charge_current, &max_charge_current, &in_voltage_range, &out_source_priority, &charger_source_priority, &machine_type, &topology, &out_mode, &batt_redischarge_voltage);
 
                 // There appears to be a discrepancy in actual DMM measured current vs what the meter is
                 // telling me it's getting, so lets add a variable we can multiply/divide by to adjust if
                 // needed.  This should be set in the config so it can be changed without program recompile.
                 if (debugFlag) {
-                    printf("INVERTER: ampfactor from config is %.2f\n", ampfactor);
-                    printf("INVERTER: wattfactor from config is %.2f\n", wattfactor);
+                    printf("ampfactor from config is %.2f\n", ampfactor);
+                    printf("wattfactor from config is %.2f\n", wattfactor);
                 }
 
                 pv_input_current = pv_input_current * ampfactor;
@@ -293,9 +273,8 @@ int main(int argc, char* argv[]) {
                 delete reply2;
 
                 if(runOnce) {
-                    ups->terminateThread();
                     // Do once and exit instead of loop endlessly
-                    lprintf("INVERTER: All queries complete, exiting loop.");
+                    lprintf("All queries complete, exiting loop.");
                     exit(0);
                 }
             }
@@ -304,9 +283,7 @@ int main(int argc, char* argv[]) {
         sleep(1);
     }
 
-    if (ups) {
-        ups->terminateThread();
+    if (ups)
         delete ups;
-    }
     return 0;
 }
